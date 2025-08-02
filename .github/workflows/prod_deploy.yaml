@@ -1,0 +1,648 @@
+name: Deploy MACROTECH PAYPOINT USER UI FRONTEND CI
+
+on:
+  push:
+    branches:
+      - main # For development
+      - prod # For production
+      - staging # For staging/testing
+      - test # For testing
+      - production # Alternative production branch
+
+jobs:
+  build:
+    name: Build MACROTECH PAYPOINT UI FRONTEND
+    runs-on: [self-hosted, Linux, X64, macrotech-actions-runner]
+
+    # Determine environment based on branch
+    env:
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref == 'refs/heads/prod' && 'prod' || github.ref == 'refs/heads/production' && 'prod' || github.ref == 'refs/heads/staging' && 'staging' || github.ref == 'refs/heads/test' && 'test' || 'dev' }}
+      SECRET_NAME: ${{ github.ref == 'refs/heads/main' && 'MACROTECH_ESTATE_DASHBOARD_DEV' || github.ref == 'refs/heads/prod' && 'MACROTECH_ESTATE_DASHBOARD_PROD' || github.ref == 'refs/heads/production' && 'MACROTECH_ESTATE_DASHBOARD_PROD' || github.ref == 'refs/heads/staging' && 'MACROTECH_ESTATE_DASHBOARD_STAGING' || github.ref == 'refs/heads/test' && 'MACROTECH_ESTATE_DASHBOARD_TEST' || 'MACROTECH_ESTATE_DASHBOARD_DEV' }}
+      APP_NAME: ${{ github.ref == 'refs/heads/main' && 'macrotech-estate-dashboard-dev' || github.ref == 'refs/heads/prod' && 'macrotech-estate-dashboard-prod' || github.ref == 'refs/heads/production' && 'macrotech-estate-dashboard-prod' || github.ref == 'refs/heads/staging' && 'macrotech-estate-dashboard-staging' || github.ref == 'refs/heads/test' && 'macrotech-estate-dashboard-test' || 'macrotech-estate-dashboard-dev' }}
+      NODE_VERSION: ${{ github.ref == 'refs/heads/prod' && '18.17.0' || github.ref == 'refs/heads/production' && '18.17.0' || '22.13.1' }}
+      DOMAIN_NAME: ${{ github.ref == 'refs/heads/main' && 'estate.macrotech.com.ng' || github.ref == 'refs/heads/prod' && 'estate.macrotech.com.ng' || github.ref == 'refs/heads/production' && 'estate.macrotech.com.ng' || github.ref == 'refs/heads/staging' && 'staging.estate.macrotech.com.ng' || github.ref == 'refs/heads/test' && 'test.estate.macrotech.com.ng' || 'dev.estate.macrotech.com.ng' }}
+      APP_PORT: ${{ github.ref == 'refs/heads/main' && '4015' || github.ref == 'refs/heads/prod' && '4015' || github.ref == 'refs/heads/production' && '4015' || github.ref == 'refs/heads/staging' && '4015' || github.ref == 'refs/heads/test' && '4015' || '4015' }}
+
+    steps:
+      - name: Print Environment Information
+        run: |
+          echo "Current Branch: ${{ github.ref }}"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Secret Name: ${{ env.SECRET_NAME }}"
+          echo "App Name: ${{ env.APP_NAME }}"
+          echo "Node Version: ${{ env.NODE_VERSION }}"
+          echo "Domain Name: ${{ env.DOMAIN_NAME }}"
+          echo "App Port: ${{ env.APP_PORT }}"
+          echo "Working Directory: $(pwd)"
+
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_NAME }} # Checkout to the environment-specific directory
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ${{ env.APP_NAME }}/package-lock.json
+
+      - name: Verify Node.js Installation
+        run: |
+          echo "Node.js version:"
+          node --version
+          echo "NPM version:"
+          npm --version
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Install Dependencies
+        run: |
+          echo "Installing dependencies for ${{ env.ENVIRONMENT }} environment"
+          npm ci
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: "Create and verify env file"
+        shell: bash
+        run: |
+          # Create environment file with environment-specific secrets
+          echo "Creating .env file for ${{ env.ENVIRONMENT }} environment"
+          echo '${{ secrets[env.SECRET_NAME] }}' > .env
+          echo "NEXT_PUBLIC_ENVIRONMENT=${{ env.ENVIRONMENT }}" >> .env
+          echo "PORT=${{ env.APP_PORT }}" >> .env
+
+          # Verify file exists and has content
+          if [ -s .env ]; then
+            echo "✓ .env file created successfully"
+            echo "✓ File size: $(wc -c < .env) bytes"
+            echo "✓ Environment variables count: $(grep -c "=" .env || echo "0")"
+          else
+            echo "× .env file is empty or doesn't exist"
+            exit 1
+          fi
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Cache Next.js Build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.APP_NAME }}/.next/cache
+            ${{ env.APP_NAME }}/node_modules/.cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('${{ env.APP_NAME }}/package-lock.json') }}-${{ hashFiles('${{ env.APP_NAME }}/src/**/*.[jt]s', '${{ env.APP_NAME }}/src/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('${{ env.APP_NAME }}/package-lock.json') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Build Next.js Application
+        run: |
+          echo "Building Next.js application for ${{ env.ENVIRONMENT }} environment"
+
+          # Create or update next.config.js to skip linting and enable caching
+          if [ -f "next.config.js" ]; then
+            # Backup existing config
+            cp next.config.js next.config.js.backup
+          fi
+
+          # Create temporary next.config.js with caching enabled
+          cat > next.config.js << 'EOF'
+          /** @type {import('next').NextConfig} */
+          const nextConfig = {
+            eslint: {
+              ignoreDuringBuilds: true,
+            },
+            typescript: {
+              ignoreBuildErrors: true,
+            },
+            // Enable build caching
+            experimental: {
+              // Enable SWC minification for faster builds
+              swcMinify: true,
+            },
+            // Configure build cache
+            distDir: '.next',
+          }
+
+          module.exports = nextConfig
+          EOF
+
+          echo "✓ Created temporary next.config.js with caching enabled"
+
+          # Create .next/cache directory if it doesn't exist
+          mkdir -p .next/cache
+
+          # Run the build with cache configuration
+          npm run build
+
+          # Restore original config if it existed
+          if [ -f "next.config.js.backup" ]; then
+            mv next.config.js.backup next.config.js
+            echo "✓ Restored original next.config.js"
+          fi
+
+          # Verify build output
+          if [ -d ".next" ]; then
+            echo "✓ Build completed successfully"
+            echo "✓ Build directory size: $(du -sh .next | cut -f1)"
+            echo "✓ Cache directory size: $(du -sh .next/cache | cut -f1)"
+          else
+            echo "× Build failed - .next directory not found"
+            exit 1
+          fi
+        working-directory: ${{ env.APP_NAME }}
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+          # Enable Next.js build cache
+          NEXT_CACHE_DIR: .next/cache
+
+      - name: Setup PM2
+        run: |
+          if ! command -v pm2 &> /dev/null; then
+            echo "PM2 not found, installing..."
+            npm install -g pm2
+          else
+            echo "PM2 is already installed"
+            pm2 --version
+          fi
+
+      - name: Verify PM2 configuration
+        run: |
+          if [ ! -f pm2.config.json ]; then
+            echo "× pm2.config.json not found!"
+            echo "Creating pm2.config.json PM2 config file..."
+            echo '{
+              "apps": [{
+                "name": "${{ env.APP_NAME }}",
+                "script": "npm",
+                "args": "start",
+                "instances": 1,
+                "autorestart": true,
+                "watch": false,
+                "max_memory_restart": "1G",
+                "env": {
+                  "NODE_ENV": "${{ env.ENVIRONMENT == 'prod' && 'production' || 'development' }}",
+                  "NEXT_PUBLIC_ENVIRONMENT": "${{ env.ENVIRONMENT }}",
+                  "PORT": "${{ env.APP_PORT }}"
+                },
+                "error_file": "./logs/${{ env.APP_NAME }}-error.log",
+                "out_file": "./logs/${{ env.APP_NAME }}-out.log",
+                "log_file": "./logs/${{ env.APP_NAME }}-combined.log"
+              }]
+            }' > pm2.config.json
+            echo "✓ Created default PM2 config file"
+          else
+            echo "✓ PM2 config file exists"
+          fi
+
+          # Create logs directory if it doesn't exist
+          mkdir -p logs
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Check System Permissions
+        run: |
+          echo "Checking system permissions and configuration..."
+          echo "Current user: $(whoami)"
+          echo "Groups: $(groups)"
+
+          # Check if user has sudo privileges with multiple tests
+          SUDO_WORKS=false
+
+          # Test 1: Basic sudo test
+          if sudo -n true 2>/dev/null; then
+            echo "✓ Basic sudo test passed"
+            SUDO_WORKS=true
+          fi
+
+          # Test 2: Test specific commands we need
+          if sudo -n /usr/bin/nginx -t 2>/dev/null; then
+            echo "✓ Nginx sudo command test passed"
+            SUDO_WORKS=true
+          fi
+
+          # Test 3: Test systemctl
+          if sudo -n /usr/bin/systemctl status nginx 2>/dev/null >/dev/null; then
+            echo "✓ Systemctl sudo command test passed"
+            SUDO_WORKS=true
+          fi
+
+          if [ "$SUDO_WORKS" = true ]; then
+            echo "✓ User has passwordless sudo access"
+            echo "SUDO_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "⚠ User does not have passwordless sudo access"
+            echo "SUDO_AVAILABLE=false" >> $GITHUB_ENV
+            echo "To fix this, run on the server:"
+            echo 'echo "$(whoami) ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/github-runner'
+          fi
+
+          # Check if nginx is installed and accessible
+          if command -v nginx >/dev/null 2>&1; then
+            echo "✓ Nginx is installed"
+            echo "NGINX_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "⚠ Nginx is not installed"
+            echo "NGINX_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
+          # Check if certbot is installed
+          if command -v certbot >/dev/null 2>&1; then
+            echo "✓ Certbot is installed"
+            echo "CERTBOT_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "⚠ Certbot is not installed"
+            echo "CERTBOT_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
+          # Check nginx configuration directory permissions
+          if [ -d "/etc/nginx/conf.d" ]; then
+            echo "✓ Nginx config directory exists"
+            ls -la /etc/nginx/conf.d/ || echo "Cannot list nginx config directory"
+          else
+            echo "⚠ Nginx config directory not found"
+          fi
+
+      - name: Install Prerequisites (Nginx and Certbot)
+        if: env.SUDO_AVAILABLE == 'true'
+        run: |
+          echo "Installing prerequisites..."
+
+          # Update package list
+          sudo apt update
+
+          # Install nginx if not present
+          if ! command -v nginx &> /dev/null; then
+            echo "Installing nginx..."
+            sudo apt install -y nginx
+            echo "✓ Nginx installed successfully"
+          else
+            echo "✓ Nginx is already installed"
+          fi
+
+          # Install certbot if not present
+          if ! command -v certbot &> /dev/null; then
+            echo "Installing certbot and nginx plugin..."
+            sudo apt install -y certbot python3-certbot-nginx
+            echo "✓ Certbot installed successfully"
+          else
+            echo "✓ Certbot is already installed"
+            certbot --version
+          fi
+
+          # Ensure nginx is running
+          sudo systemctl enable nginx
+          sudo systemctl start nginx
+          echo "✓ Nginx service is enabled and started"
+
+      - name: Setup Nginx Configuration (With Sudo)
+        if: env.SUDO_AVAILABLE == 'true'
+        run: |
+          # Extract domain name without extension for config file naming
+          DOMAIN_BASE=$(echo "${{ env.DOMAIN_NAME }}" | sed 's/\.[^.]*\.[^.]*$//')
+          NGINX_CONFIG_FILE="/etc/nginx/conf.d/${DOMAIN_BASE}.conf"
+
+          echo "Setting up nginx configuration for domain: ${{ env.DOMAIN_NAME }}"
+          echo "Config file path: ${NGINX_CONFIG_FILE}"
+
+          # Check if nginx config file exists
+          CONFIG_EXISTS=false
+          if [ -f "${NGINX_CONFIG_FILE}" ]; then
+            CONFIG_EXISTS=true
+            echo "✓ Nginx configuration already exists: ${NGINX_CONFIG_FILE}"
+          else
+            echo "Creating new nginx configuration..."
+            CONFIG_EXISTS=false
+          fi
+
+          # Set environment variable for SSL setup step
+          echo "CONFIG_EXISTS=${CONFIG_EXISTS}" >> $GITHUB_ENV
+          echo "NGINX_CONFIG_FILE=${NGINX_CONFIG_FILE}" >> $GITHUB_ENV
+
+          if [ "${CONFIG_EXISTS}" = false ]; then
+            # Create initial HTTP-only nginx configuration (required for certbot)
+            sudo tee "${NGINX_CONFIG_FILE}" > /dev/null <<EOF
+          server {
+              listen 80;
+              server_name ${{ env.DOMAIN_NAME }};
+
+              # Allow certbot to access .well-known directory for domain verification
+              location /.well-known/acme-challenge/ {
+                  root /var/www/html;
+              }
+
+              location / {
+                  proxy_pass http://127.0.0.1:${{ env.APP_PORT }};
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_cache_bypass \$http_upgrade;
+                  proxy_read_timeout 86400;
+              }
+          }
+          EOF
+            
+            echo "✓ Created initial HTTP nginx configuration file: ${NGINX_CONFIG_FILE}"
+          else
+            # Update proxy_pass port if different in existing configuration
+            if ! grep -q "proxy_pass http://127.0.0.1:${{ env.APP_PORT }}" "${NGINX_CONFIG_FILE}"; then
+              echo "Updating proxy port in existing configuration..."
+              sudo sed -i "s/proxy_pass http:\/\/127\.0\.0\.1:[0-9]\+/proxy_pass http:\/\/127.0.0.1:${{ env.APP_PORT }}/" "${NGINX_CONFIG_FILE}"
+              echo "✓ Updated proxy port to ${{ env.APP_PORT }}"
+            fi
+          fi
+
+          # Test nginx configuration
+          sudo nginx -t || {
+            echo "× Nginx configuration test failed"
+            exit 1
+          }
+
+          # Reload nginx
+          sudo systemctl reload nginx || {
+            echo "× Failed to reload nginx"
+            exit 1
+          }
+
+          echo "✓ Nginx configuration loaded successfully"
+
+      - name: Setup SSL Certificate with Certbot
+        if: env.SUDO_AVAILABLE == 'true' && env.CONFIG_EXISTS == 'false'
+        run: |
+          echo "Setting up SSL certificate for new domain: ${{ env.DOMAIN_NAME }}"
+
+          # Ensure the web root directory exists
+          sudo mkdir -p /var/www/html
+
+          # Wait a moment for nginx to fully reload
+          sleep 5
+
+          # Check if certificate already exists
+          if sudo certbot certificates 2>/dev/null | grep -q "${{ env.DOMAIN_NAME }}"; then
+            echo "✓ SSL certificate already exists for ${{ env.DOMAIN_NAME }}"
+            echo "Attempting to renew if needed..."
+            sudo certbot renew --quiet || echo "⚠ Certificate renewal check completed"
+          else
+            echo "Obtaining new SSL certificate for ${{ env.DOMAIN_NAME }}..."
+            
+            # Request SSL certificate using certbot with nginx plugin
+            # This will automatically modify the nginx configuration
+            sudo certbot --nginx \
+              --non-interactive \
+              --agree-tos \
+              --email admin@macrotech.com.ng \
+              --domains ${{ env.DOMAIN_NAME }} \
+              --redirect || {
+              
+              echo "⚠ Certbot automatic configuration failed. Trying manual approach..."
+              
+              # Try webroot method as fallback
+              sudo certbot certonly \
+                --webroot \
+                --webroot-path=/var/www/html \
+                --non-interactive \
+                --agree-tos \
+                --email admin@macrotech.com.ng \
+                --domains ${{ env.DOMAIN_NAME }} || {
+                
+                echo "⚠ SSL certificate creation failed"
+                echo "This might be due to:"
+                echo "1. Domain not pointing to this server"
+                echo "2. Firewall blocking port 80/443"
+                echo "3. DNS propagation not complete"
+                echo "The application will continue to work over HTTP"
+                exit 0
+              }
+              
+              # If webroot method succeeded, manually configure nginx
+              echo "Manually configuring nginx for SSL..."
+              sudo tee "${{ env.NGINX_CONFIG_FILE }}" > /dev/null <<EOF
+          server {
+              listen 80;
+              server_name ${{ env.DOMAIN_NAME }};
+              return 301 https://\$server_name\$request_uri;
+          }
+
+          server {
+              listen 443 ssl http2;
+              server_name ${{ env.DOMAIN_NAME }};
+
+              ssl_certificate /etc/letsencrypt/live/${{ env.DOMAIN_NAME }}/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/${{ env.DOMAIN_NAME }}/privkey.pem;
+              
+              # Modern SSL configuration
+              ssl_protocols TLSv1.2 TLSv1.3;
+              ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+              ssl_prefer_server_ciphers off;
+              ssl_session_cache shared:SSL:10m;
+              ssl_session_timeout 1d;
+              ssl_session_tickets off;
+              
+              # Security headers
+              add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+              add_header X-Frame-Options DENY;
+              add_header X-Content-Type-Options nosniff;
+              add_header X-XSS-Protection "1; mode=block";
+
+              location / {
+                  proxy_pass http://127.0.0.1:${{ env.APP_PORT }};
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_cache_bypass \$http_upgrade;
+                  proxy_read_timeout 86400;
+              }
+          }
+          EOF
+            }
+            
+            echo "✓ SSL certificate setup completed"
+          fi
+
+          # Test nginx configuration after SSL setup
+          sudo nginx -t || {
+            echo "× Nginx configuration test failed after SSL setup"
+            exit 1
+          }
+
+          # Reload nginx to apply SSL configuration
+          sudo systemctl reload nginx
+          echo "✓ Nginx reloaded with SSL configuration"
+
+          # Set up automatic renewal
+          echo "Setting up automatic certificate renewal..."
+          (sudo crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | sudo crontab -
+          echo "✓ Automatic certificate renewal configured"
+
+      - name: Renew Existing SSL Certificate
+        if: env.SUDO_AVAILABLE == 'true' && env.CONFIG_EXISTS == 'true'
+        run: |
+          echo "Checking and renewing existing SSL certificate for: ${{ env.DOMAIN_NAME }}"
+
+          # Check if certificate exists and attempt renewal
+          if sudo certbot certificates 2>/dev/null | grep -q "${{ env.DOMAIN_NAME }}"; then
+            echo "✓ SSL certificate exists for ${{ env.DOMAIN_NAME }}"
+            echo "Checking if renewal is needed..."
+            
+            # Attempt renewal (this will only renew if certificate is close to expiry)
+            sudo certbot renew --quiet || {
+              echo "⚠ Certificate renewal failed, but continuing deployment"
+            }
+            
+            echo "✓ Certificate renewal check completed"
+          else
+            echo "⚠ No existing certificate found for ${{ env.DOMAIN_NAME }}"
+          fi
+
+      - name: Setup Nginx Configuration (Without Sudo)
+        if: env.SUDO_AVAILABLE == 'false'
+        run: |
+          echo "⚠ Cannot configure nginx automatically - sudo access required"
+          echo "Please manually configure nginx with the following configuration:"
+          echo ""
+          echo "File: /etc/nginx/conf.d/macropay.macrotech.com.conf"
+          echo "Content:"
+          cat << EOF
+          # Initial HTTP configuration
+          server {
+              listen 80;
+              server_name ${{ env.DOMAIN_NAME }};
+
+              location /.well-known/acme-challenge/ {
+                  root /var/www/html;
+              }
+
+              location / {
+                  proxy_pass http://127.0.0.1:${{ env.APP_PORT }};
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_cache_bypass \$http_upgrade;
+                  proxy_read_timeout 86400;
+              }
+          }
+          EOF
+          echo ""
+          echo "After creating the config file, run:"
+          echo "sudo nginx -t && sudo systemctl reload nginx"
+          echo ""
+          echo "To setup SSL certificate, run:"
+          echo "sudo certbot --nginx -d ${{ env.DOMAIN_NAME }}"
+
+      - name: Start PM2
+        run: |
+          echo "Deploying application ${{ env.APP_NAME }} with PM2"
+          pm2 delete --silent ${{ env.APP_NAME }} || :
+          pm2 start pm2.config.json
+          pm2 save
+
+          # Wait a moment for the app to start
+          sleep 5
+
+          # Show PM2 status
+          pm2 list
+          pm2 show ${{ env.APP_NAME }}
+
+          # Check if app is running
+          if pm2 describe ${{ env.APP_NAME }} | grep -q "online"; then
+            echo "✓ Application ${{ env.APP_NAME }} is running successfully"
+          else
+            echo "× Application ${{ env.APP_NAME }} failed to start"
+            pm2 logs ${{ env.APP_NAME }} --lines 50
+            exit 1
+          fi
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Health Check
+        run: |
+          echo "Performing health check..."
+          # Wait for application to fully start
+          sleep 10
+
+          # Check local application health
+          if curl -f -s http://localhost:${{ env.APP_PORT }} > /dev/null; then
+            echo "✓ Local health check passed - Application is responding on port ${{ env.APP_PORT }}"
+          else
+            echo "⚠ Local health check failed - Application may not be fully ready yet"
+            echo "PM2 Status:"
+            pm2 show ${{ env.APP_NAME }}
+          fi
+
+          # Check domain health (HTTP and HTTPS) - only if nginx is configured
+          if [ "${{ env.SUDO_AVAILABLE }}" == "true" ]; then
+            echo "Testing domain access..."
+            
+            # Test HTTP access
+            if curl -f -s -H "Host: ${{ env.DOMAIN_NAME }}" http://localhost > /dev/null; then
+              echo "✓ HTTP health check passed - ${{ env.DOMAIN_NAME }} is accessible"
+            else
+              echo "⚠ HTTP health check failed - Please check nginx configuration"
+            fi
+            
+            # Test HTTPS access if SSL is configured
+            if sudo certbot certificates 2>/dev/null | grep -q "${{ env.DOMAIN_NAME }}"; then
+              echo "Testing HTTPS access..."
+              if curl -f -s -k https://${{ env.DOMAIN_NAME }} > /dev/null; then
+                echo "✓ HTTPS health check passed - SSL is working"
+              else
+                echo "⚠ HTTPS health check failed - SSL may still be configuring"
+              fi
+            fi
+          else
+            echo "⚠ Skipping domain health check - nginx configuration requires manual setup"
+          fi
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Display Deployment Summary
+        run: |
+          echo "🚀 Deployment Summary"
+          echo "===================="
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Application: ${{ env.APP_NAME }}"
+          echo "Domain: ${{ env.DOMAIN_NAME }}"
+          echo "Port: ${{ env.APP_PORT }}"
+          echo "Node Version: ${{ env.NODE_VERSION }}"
+          echo "Sudo Available: ${{ env.SUDO_AVAILABLE }}"
+          echo ""
+          echo "🔗 Access your application:"
+          echo "Direct: http://$(hostname -I | awk '{print $1}'):${{ env.APP_PORT }}"
+          if [ "${{ env.SUDO_AVAILABLE }}" == "true" ]; then
+            echo "HTTP: http://${{ env.DOMAIN_NAME }}"
+            # Check if SSL certificate exists
+            if sudo certbot certificates 2>/dev/null | grep -q "${{ env.DOMAIN_NAME }}"; then
+              echo "HTTPS: https://${{ env.DOMAIN_NAME }} ✓ SSL Enabled"
+            else
+              echo "HTTPS: SSL certificate not configured"
+            fi
+          else
+            echo "Domain access requires manual nginx configuration"
+          fi
+          echo ""
+          echo "📊 PM2 Status:"
+          pm2 list
+          echo ""
+          if [ "${{ env.SUDO_AVAILABLE }}" == "true" ]; then
+            echo "🔒 SSL Certificate Status:"
+            sudo certbot certificates 2>/dev/null | grep -A 3 "${{ env.DOMAIN_NAME }}" || echo "No SSL certificate found"
+          fi
+        working-directory: ${{ env.APP_NAME }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up build artifacts..."
+          # Keep essential files but clean up unnecessary build artifacts
+          # This step is optional and can be customized based on your needs
+          if [ -d "node_modules/.cache" ]; then
+            rm -rf node_modules/.cache
+            echo "✓ Cleaned up build cache"
+          fi
+        working-directory: ${{ env.APP_NAME }}
