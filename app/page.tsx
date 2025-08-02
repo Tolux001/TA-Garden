@@ -51,7 +51,7 @@ export default function LoginPage() {
 						</div>
 					</div>
 					<CardTitle className="text-2xl font-bold text-green-700 dark:text-green-400">
-						MacroPayPoint TA Gardens
+						MacroTech Estate Portal
 					</CardTitle>
 					<CardDescription>Sign in to your admin dashboard</CardDescription>
 				</CardHeader>

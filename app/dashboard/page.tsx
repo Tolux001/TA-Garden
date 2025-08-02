@@ -94,10 +94,10 @@ export default function DashboardPage() {
 		<div className="space-y-6">
 			<div>
 				<h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-					Welcome to MacroPayPoint Dashboard
+					Welcome to MacroTech Estate Dashboard
 				</h1>
 				<p className="text-gray-600 dark:text-gray-400 mt-2">
-					Overview of your TA Garden estate management system
+					Overview of your Estate management system
 				</p>
 			</div>
 

@@ -8,8 +8,8 @@ const inter = Inter({ subsets: ["latin"] });
 import { AuthProvider } from "@/lib/authContext";
 
 export const metadata: Metadata = {
-	title: "MacroTech TA Gardens Dashboard",
-	description: "Admin dashboard for MacroTech TA Gardens estate management",
+	title: "MacroTech Estate Portal",
+	description: "Admin dashboard for MacroTech Estate management",
 	generator: "tolux001.vercel.app",
 };
 
