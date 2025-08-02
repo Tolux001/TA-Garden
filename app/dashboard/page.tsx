@@ -89,7 +89,7 @@ export default function DashboardPage() {
 
 	const activeMembers = members.filter((member) => member.isActive).length;
 	const inactiveMembers = members.filter((member) => !member.isActive).length;
-	// console.log(activeMembers, inactiveMembers);
+
 	return (
 		<div className="space-y-6">
 			<div>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
 								<div className="flex-1">
 									<p className="text-sm font-medium">New member registered</p>
 									<p className="text-xs text-gray-500">
-										John Doe - 2 minutes ago
+										President Trump - 2 minutes ago
 									</p>
 								</div>
 							</div>
@@ -141,7 +141,7 @@ export default function DashboardPage() {
 								<div className="w-2 h-2 bg-blue-500 rounded-full"></div>
 								<div className="flex-1">
 									<p className="text-sm font-medium">
-										Token purchase completed
+										Token purchase completed-Very poor Man
 									</p>
 									<p className="text-xs text-gray-500">
 										₦50,000 - 5 minutes ago
@@ -153,7 +153,7 @@ export default function DashboardPage() {
 								<div className="flex-1">
 									<p className="text-sm font-medium">Member deactivated</p>
 									<p className="text-xs text-gray-500">
-										Jane Smith - 10 minutes ago
+										President Tinubu - 10 minutes ago
 									</p>
 								</div>
 							</div>
