@@ -35,6 +35,8 @@ export interface Member {
 	address: string;
 	meterType: string;
 	isActive: boolean;
+	createdAt?: string;
+	trafficIndex?: string | null;
 }
 
 export default function MembersPage() {

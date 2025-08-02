@@ -1,4 +1,5 @@
 import type { Transaction } from "@/app/dashboard/transactions/page";
+import type { Member } from "@/app/dashboard/members/page";
 interface RawData {
 	operationId: string;
 	customerName: string;
@@ -14,6 +15,25 @@ interface TransactionApiResponse {
 	statusCode: number;
 	message: string;
 	data: RawData[];
+}
+
+interface MemberFormData {
+	customerName: string;
+	customerPhoneNumber: string;
+	meterNumber: string;
+	meterType: string;
+	address: string;
+}
+
+interface APIMember {
+	customerName: string;
+	customerPhoneNumber: string;
+	meterNumber: string;
+	address: string;
+	meterType: string;
+	status: "Active" | "Inactive";
+	createdAt: string;
+	tariffIndex: string | null;
 }
 
 export const getTokenFromCookie = (): string | null => {
@@ -97,7 +117,7 @@ export const getTransactions = async (): Promise<Transaction[]> => {
 	);
 };
 
-export const getMembers = async () => {
+export const getMembers = async (): Promise<Member[]> => {
 	const res = await fetchFunction("private-estate/list-estate-member", "GET");
 	const result = await res.json();
 
@@ -105,21 +125,23 @@ export const getMembers = async () => {
 		throw new Error(result?.message || "Failed to fetch members");
 	}
 
-	const new_data = result.data.data.map((member: any, index: number) => ({
-		id: (index + 1).toString(),
-		fullName: member.customerName,
-		phoneNumber: member.customerPhoneNumber,
-		meterNumber: member.meterNumber,
-		address: member.address,
-		meterType: member.meterType,
-		isActive: member.status === "Active",
-		createdAt: new Date(member.createdAt).toLocaleDateString(),
-		trafficIndex: null,
-	}));
+	const new_data: Member[] = result.data.data.map(
+		(member: APIMember, index: number) => ({
+			id: (index + 1).toString(),
+			fullName: member.customerName,
+			phoneNumber: member.customerPhoneNumber,
+			meterNumber: member.meterNumber,
+			address: member.address,
+			meterType: member.meterType,
+			isActive: member.status === "Active",
+			createdAt: new Date(member.createdAt).toLocaleDateString(),
+			trafficIndex: member.tariffIndex,
+		})
+	);
 	return new_data;
 };
 
-export const createMember = async (formData: any) => {
+export const createMember = async (formData: MemberFormData) => {
 	const res = await fetchFunction(
 		"private-estate/create-estate-member",
 		"POST",
