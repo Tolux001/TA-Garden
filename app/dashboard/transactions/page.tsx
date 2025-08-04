@@ -22,17 +22,7 @@ import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getTransactions } from "@/lib/auth";
 import toast from "react-hot-toast";
-
-export interface Transaction {
-	id: string;
-	fullName: string;
-	phoneNumber: string;
-	meterNumber: string;
-	amount: number;
-	token: string;
-	status: "Completed" | "Pending" | "Failed";
-	date: string;
-}
+import type { Transaction } from "@/lib/types";
 
 export default function TransactionsPage() {
 	const [transactions, setTransactions] = useState<Transaction[]>([]);

@@ -1,40 +1,8 @@
-import type { Transaction } from "@/app/dashboard/transactions/page";
-import type { Member } from "@/app/dashboard/members/page";
-interface RawData {
-	operationId: string;
-	customerName: string;
-	customerId: string;
-	cardIdentity: string;
-	amountCharge: number;
-	token: string;
-	status: string;
-	timeOut?: string;
-	timeIn?: string;
-}
-interface TransactionApiResponse {
-	statusCode: number;
-	message: string;
-	data: RawData[];
-}
-
-interface MemberFormData {
-	customerName: string;
-	customerPhoneNumber: string;
-	meterNumber: string;
-	meterType: string;
-	address: string;
-}
-
-interface APIMember {
-	customerName: string;
-	customerPhoneNumber: string;
-	meterNumber: string;
-	address: string;
-	meterType: string;
-	status: "Active" | "Inactive";
-	createdAt: string;
-	tariffIndex: string | null;
-}
+import type { Transaction } from "./types";
+import type { Member } from "./types";
+import type { TransactionApiResponse } from "./types";
+import type { MemberFormData } from "./types";
+import type { APIMember } from "./types";
 
 export const getTokenFromCookie = (): string | null => {
 	const match = document.cookie.match(/(^| )token=([^;]+)/);

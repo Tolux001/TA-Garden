@@ -4,15 +4,9 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, ShoppingCart, TrendingUp, Receipt } from "lucide-react";
 import { getDashboardStats, getMembers } from "@/lib/auth";
-import type { Member } from "./members/page";
+import type { Member } from "@/lib/types";
+import type { DashboardStats } from "@/lib/types";
 
-interface DashboardStats {
-	totalAmount: string;
-	noOfTransaction: string;
-	totalCommissionPaid: string;
-	totalAmountPaid: string;
-	totalCommission: string;
-}
 export default function DashboardPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [dashboardStats, setDashboardStats] = useState<DashboardStats>();

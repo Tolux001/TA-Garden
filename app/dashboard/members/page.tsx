@@ -26,18 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Users, UserCheck, UserX } from "lucide-react";
 import toast from "react-hot-toast";
 import { DialogDescription } from "@radix-ui/react-dialog";
-
-export interface Member {
-	id: string;
-	fullName: string;
-	phoneNumber: string;
-	meterNumber: string;
-	address: string;
-	meterType: string;
-	isActive: boolean;
-	createdAt?: string;
-	trafficIndex?: string | null;
-}
+import type { Member } from "@/lib/types";
 
 export default function MembersPage() {
 	const [members, setMembers] = useState<Member[]>([]);
